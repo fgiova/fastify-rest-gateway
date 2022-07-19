@@ -1,5 +1,6 @@
 import {test} from "tap";
 import fastify, {FastifyInstance, FastifyRequest} from "fastify";
+import fp from "fastify-plugin";
 import {makeRoute} from "../src/makeRoute";
 import {MockAgent, MockPool, setGlobalDispatcher} from "undici";
 import fastifyReplyFrom from "@fastify/reply-from";
@@ -7,6 +8,7 @@ import fastifyRateLimit from "@fastify/rate-limit";
 import {Type} from "@sinclair/typebox";
 // @ts-ignore
 import createError from "http-errors";
+import fastifySwagger from "@fastify/swagger";
 
 test("Make routes for fastify", {only: true}, async  t => {
 	t.beforeEach(async (t) => {
@@ -384,12 +386,6 @@ test("Make routes for fastify", {only: true}, async  t => {
 
 	await t.test("Simple route w security", async t => {
 		const app = t.context.app as FastifyInstance;
-		app.decorate("isenduAuth", (constraint: any) => {
-			const auth = async (request, reply) => {
-				return constraint.isApiKey
-			}
-			return auth.bind({constraint});
-		});
 		const mockPool = t.context.mockPool as MockPool;
 		mockPool.intercept({
 			path: "/test",
@@ -427,6 +423,129 @@ test("Make routes for fastify", {only: true}, async  t => {
 		t.equal(res.statusCode, 200);
 		t.same(res.json(), {test: "test"});
 	});
+	await t.test("Simple route w security and swagger", async t => {
+		const app = t.context.app as FastifyInstance;
+		app.register(fastifySwagger, {
+			openapi: {
+				info: {
+					title: "OpenApi api",
+					description: "fastify swagger api",
+					version: "0.0.0"
+				},
+				servers: [{
+					url: "http://localhost"
+				}],
+				components: {
+					securitySchemes: {
+						apiKey: {
+							type: "apiKey",
+							name: "x-api-key",
+							in: "header"
+						}
+					}
+				}
+			},
+			hideUntagged: true,
+			exposeRoute: true,
+			routePrefix: "/open-api",
+		});
+		const mockPool = t.context.mockPool as MockPool;
+		mockPool.intercept({
+			path: "/test",
+			method: "GET"
+		}).reply(200, () => {
+			return {test: "test"}
+		}, {
+			headers: {
+				"content-type" :"application/json"
+			}
+		});
+		app.register(fp((fastify: FastifyInstance, opts: {}, next: any) => {
+			makeRoute({
+				url: "/test",
+				method: "GET",
+				schema: {
+					response: {
+						200: Type.Object({
+							test: Type.String()
+						})
+					}
+				},
+				security: [
+					{
+						apiKey: []
+					}
+				]
+			}, {
+				host: "https://test.fgiova.com",
+			}, app);
+			next();
+		}));
+		await app.ready();
+		const res = await app.inject({
+			path: "/test",
+			method: "GET"
+		});
+		t.equal(res.statusCode, 200);
+		t.same(res.json(), {test: "test"});
+	});
+	await t.test("Simple route w security and security handler", {only: true}, async t => {
+		const app = t.context.app as FastifyInstance;
+		const mockPool = t.context.mockPool as MockPool;
+		mockPool.intercept({
+			path: "/test",
+			method: "GET"
+		}).reply(200, () => {
+			return {test: "test"}
+		}, {
+			headers: {
+				"content-type" :"application/json"
+			}
+		});
+		app.register(fp((fastify: FastifyInstance, opts: {}, next: any) => {
+			makeRoute({
+				url: "/test",
+				method: "GET",
+				schema: {
+					response: {
+						200: Type.Object({
+							test: Type.String()
+						})
+					}
+				},
+				authHandler: async (request, reply) => {
+					if(request.headers.authorization === "test") {
+						return true;
+					}
+					throw new createError.Unauthorized()
+				},
+				security: [
+					{
+						apiKey: []
+					}
+				]
+			}, {
+				host: "https://test.fgiova.com",
+			}, app);
+			next();
+		}));
+		await app.ready();
+		const res = await app.inject({
+			path: "/test",
+			method: "GET",
+			headers: {
+				authorization: "test"
+			}
+		});
+		t.equal(res.statusCode, 200);
+		t.same(res.json(), {test: "test"});
+
+		const resUnauthorized = await app.inject({
+			path: "/test",
+			method: "GET"
+		});
+		t.equal(resUnauthorized.statusCode, 401);
+	});
 
 	await t.test("Simple route w limit", async t => {
 		const app = t.context.app as FastifyInstance;
@@ -441,22 +560,25 @@ test("Make routes for fastify", {only: true}, async  t => {
 				"content-type" :"application/json"
 			}
 		});
-		makeRoute({
-			url: "/test",
-			method: "GET",
-			schema: {
-				response: {
-					200: Type.Object({
-						test: Type.String()
-					})
+		app.register(fp((fastify: FastifyInstance, opts: {}, next: any) => {
+			makeRoute({
+				url: "/test",
+				method: "GET",
+				schema: {
+					response: {
+						200: Type.Object({
+							test: Type.String()
+						})
+					}
+				},
+				limit: {
+					max: 30
 				}
-			},
-			limit: {
-				max: 30
-			}
-		}, {
-			host: "https://test.fgiova.com",
-		}, app);
+			}, {
+				host: "https://test.fgiova.com",
+			}, app);
+			next();
+		}));
 		await app.ready();
 		const res = await app.inject({
 			path: "/test",
@@ -467,15 +589,6 @@ test("Make routes for fastify", {only: true}, async  t => {
 	});
 	await t.test("Simple route w limit exceeded", async t => {
 		const app = t.context.app as FastifyInstance;
-		app.decorate("isenduAuth", (constraint: any) => {
-			const auth = async (request, reply) => {
-				return constraint.isApiKey
-			}
-			return auth.bind({constraint});
-		});
-		app.decorateRequest("authApi", {
-			limit: 1
-		});
 		const mockPool = t.context.mockPool as MockPool;
 		mockPool.intercept({
 			path: "/test",
@@ -487,22 +600,70 @@ test("Make routes for fastify", {only: true}, async  t => {
 				"content-type" :"application/json"
 			}
 		});
-		makeRoute({
-			url: "/test",
-			method: "GET",
-			schema: {
-				response: {
-					200: Type.Object({
-						test: Type.String()
-					})
+		app.register(fp((fastify: FastifyInstance, opts: {}, next: any) => {
+			makeRoute({
+				url: "/test",
+				method: "GET",
+				schema: {
+					response: {
+						200: Type.Object({
+							test: Type.String()
+						})
+					}
+				},
+				limit: {
+					max: 1
 				}
-			},
-			limit: {
-				max: 30
-			}
+			}, {
+				host: "https://test.fgiova.com",
+			}, fastify);
+			next();
+		}));
+		await app.ready();
+		await app.inject({
+			path: "/test",
+			method: "GET"
+		});
+		const res = await app.inject({
+			path: "/test",
+			method: "GET"
+		});
+		t.equal(res.statusCode, 429);
+	});
+	await t.test("Simple route w limit exceeded by function", async t => {
+		const app = t.context.app as FastifyInstance;
+		const mockPool = t.context.mockPool as MockPool;
+		mockPool.intercept({
+			path: "/test",
+			method: "GET"
+		}).reply(200, () => {
+			return {test: "test"}
 		}, {
-			host: "https://test.fgiova.com",
-		}, app);
+			headers: {
+				"content-type" :"application/json"
+			}
+		});
+		app.register(fp((fastify: FastifyInstance, opts: {}, next: any) => {
+			makeRoute({
+				url: "/test",
+				method: "GET",
+				schema: {
+					response: {
+						200: Type.Object({
+							test: Type.String()
+						})
+					}
+				},
+				limit: {
+					max: (req) => {
+						return 1;
+					}
+				}
+			}, {
+				host: "https://test.fgiova.com",
+			}, fastify);
+			next();
+		}));
 		await app.ready();
 		await app.inject({
 			path: "/test",

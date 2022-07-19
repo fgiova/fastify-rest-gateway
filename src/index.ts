@@ -181,7 +181,7 @@ const loadGW = async (services:GWService[],
 	}
 };
 
-const gateway = async (fastify: FastifyInstance, config: GWConfig, next: any) => {
+const gateway = async (fastify: FastifyInstance, config: GWConfig) => {
 	const undiciAgent = config.undiciAgent || new Agent({
 		keepAliveMaxTimeout: config.undiciOpts?.keepAliveMaxTimeout || 5 * 1000, // 5 seconds
 		connections: config.undiciOpts?.connections || 10,
@@ -197,12 +197,10 @@ const gateway = async (fastify: FastifyInstance, config: GWConfig, next: any) =>
 			defaultLimit: config.defaultLimit
 		},
 		undiciAgent, fastify);
-
-	next();
 };
 
 export default fp(gateway, {
-	name: "api-gateway",
+	name: "rest-gateway",
 	dependencies:[
 		"@fastify/reply-from"
 	],

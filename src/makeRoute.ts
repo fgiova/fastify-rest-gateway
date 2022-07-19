@@ -5,6 +5,12 @@ import {
 	RawServerBase,
 	RequestGenericInterface
 } from "fastify";
+// @ts-ignore
+import type fastifyReplyFrom from "@fastify/reply-from";
+// @ts-ignore
+import type fastifSwagger from "@fastify/swagger";
+// @ts-ignore
+import type fastifyRateLimit from "@fastify/rate-limit";
 
 interface RemoteOpts {
 	host: string,
@@ -24,6 +30,18 @@ interface RemoteOpts {
 			error: { error: Error }
 		) => void;
 	}
+}
+
+interface GatewayRoute {
+	method?: HTTPMethods | HTTPMethods[],
+	schema?: FastifySchema,
+	url: string,
+	limit?: {
+		max: number | ((req: FastifyRequest) => number),
+		timeWindow?: string
+	},
+	security?: any,
+	authHandler?: preHandlerHookHandler
 }
 
 const isObject = (obj: unknown) => {
@@ -74,25 +92,13 @@ const proxy = (remote:RemoteOpts) => async (request: FastifyRequest, reply: Fast
 	}
 };
 
-interface GatewayRoute {
-	method?: HTTPMethods | HTTPMethods[],
-	schema?: FastifySchema,
-	url: string,
-	limit?: {
-		max: number | ((req: FastifyRequest) => number),
-		timeWindow?: string
-	},
-	security?: any,
-	authHandler?: preHandlerHookHandler
-}
-
 const makeRoute = (
 	route: GatewayRoute,
 	options: RemoteOpts,
-	fastify: FastifyInstance) => {
+	app: FastifyInstance) => {
 	const config: any = {};
 	const response = route.schema?.response;
-	const hasSwagger = fastify.hasDecorator("swagger");
+	const hasSwagger = app.hasDecorator("swagger");
 	if (response) {
 		stripResponseFormats(response);
 	}
@@ -110,8 +116,8 @@ const makeRoute = (
 		}
 	}
 	if(route.limit !== undefined) {
-		if(fastify.hasDecorator("rateLimit")) {
-			config.rateLimit ={
+		if(app.hasDecorator("rateLimit")) {
+			config.rateLimit = {
 				max: (req: FastifyRequest) => {
 					if(typeof route.limit.max === "function"){
 						return route.limit.max(req);
@@ -134,7 +140,7 @@ const makeRoute = (
 	options.hooks = options.hooks || {};
 	options.hooks.onRequest = options.hooks.onRequest || (async (req: FastifyRequest, reply: FastifyReply) => { });
 	options.hooks.onResponse = options.hooks.onResponse || ((req: FastifyRequest, reply: FastifyReply, res: any) => reply.send(res));
-	fastify.route({ method: methods, preHandler, config, schema: route.schema, bodyLimit, url, handler: proxy(options) });
+	app.route({ method: methods, preHandler, config, schema: route.schema, bodyLimit, url, handler: proxy(options) });
 };
 
 export {
