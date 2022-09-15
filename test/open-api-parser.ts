@@ -39,6 +39,7 @@ test("OpenApiParser Class", {only: true}, async  t => {
 		const parser = new OpenApiParser();
 		const securityMap = [
 			{
+				// @ts-ignore
 				apiKey: []
 			}
 		];
