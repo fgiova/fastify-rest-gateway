@@ -10,22 +10,24 @@ import {
 import { Agent } from "undici";
 import {Readable} from "stream";
 import sJSON from "secure-json-parse";
-import {OpenApiParser} from "./OpenApiParser";
-import {makeRoute} from "./makeRoute";
+import {OpenApiParser} from "./open-api-parser";
+import {makeRoute} from "./make-route";
 
 export interface GWService {
 	host: string;
 	hitLimit?: {
-		max: number | ((req: FastifyRequest) => number),
-		timeWindow?: string
+		max?: number | ((req: FastifyRequest) => number),
+		keyGenerator?: ((req: FastifyRequest) => string),
+		timeWindow?: number
 	},
-	authHandler?: preHandlerHookHandler,
+
 	openApiUrl?: string;
-	remotePrefix?: string;
-	gwPrefix?: string;
+	remoteBaseUrl?: string;
+	gwBaseUrl?: string;
 	bodyLimit?: number;
 	tag?: string;
 	hiddenTag?: string;
+	preHandler?: preHandlerHookHandler,
 	hooks?:{
 		onRequest?: (request: FastifyRequest, reply: FastifyReply) => any;
 		onResponse?: (
@@ -42,20 +44,20 @@ export interface GWService {
 
 export interface GWConfig {
 	defaultLimit?: {
-		max: number | ((req: FastifyRequest) => number),
-		timeWindow?: string
+		max?: number | ((req: FastifyRequest) => number),
+		keyGenerator?: ((req: FastifyRequest) => string),
+		timeWindow?: number
 	};
 	gwTag?: string;
 	gwHiddenTag?: string;
+	ignoreHidden?: boolean;
 	undiciAgent?: Agent;
 	undiciOpts?: {
 		keepAliveMaxTimeout?: number;
 		connections?: number;
 		rejectUnauthorized?: boolean;
 	};
-	services: GWService[],
-	openApi?: any,
-	authHandler?: preHandlerHookHandler
+	services: GWService[]
 }
 
 const readService = async (options: {
@@ -70,7 +72,7 @@ const readService = async (options: {
 		response = await agent.request({
 			origin: `${host}`,
 			method: "GET",
-			path: `${endpoint}/json`,
+			path: `${endpoint}`,
 			headers: {
 				"content-type": "application/json"
 			}
@@ -97,15 +99,18 @@ const readService = async (options: {
 	return parser.parse(json);
 };
 
-const resolveRoutes = (routes: any[], fastify: FastifyInstance, gwTag="public-api", gwHiddenTag="private-api") => {
+const resolveRoutes = (routes: any[], fastify: FastifyInstance,
+                       gwTag="public-api",
+                       hiddenTag="private-api",
+                       gwHiddenTag = "X-HIDDEN") => {
 	const gwRoutes: any[] = [];
 	const hasSwagger = fastify.hasDecorator("swagger");
 	for(const route of routes){
-		if(route.schema?.tags.includes(gwTag) || route.schema?.tags.includes(gwHiddenTag)){
+		if(route.schema?.tags?.includes(gwTag) || route.schema?.tags?.includes(hiddenTag)){
 			if (hasSwagger) {
 				route.schema.tags = route.schema.tags.reduce((acc: string[], value: string) => {
-					if(value.toLowerCase() === gwHiddenTag) {
-						acc.push("X-HIDDEN");
+					if(value.toLowerCase() === hiddenTag && hiddenTag !== gwHiddenTag) {
+						acc.push(gwHiddenTag);
 						return acc;
 					}
 					if(value.toLowerCase() === gwTag) return acc;
@@ -123,27 +128,27 @@ const resolveRoutes = (routes: any[], fastify: FastifyInstance, gwTag="public-ap
 };
 
 const loadGW = async (services:GWService[],
-	config: Pick<GWConfig, "gwTag"|"gwHiddenTag"|"defaultLimit"|"authHandler">,
+	config: Pick<GWConfig, "gwTag"|"gwHiddenTag"|"ignoreHidden"|"defaultLimit">,
 	undiciAgent: Agent,
 	fastify: FastifyInstance
 ) =>  {
 	for(const service of services) {
 		const openApiRoutes = await readService({
 			host: service.host,
-			endpoint: service.openApiUrl || "/open-api",
+			endpoint: service.openApiUrl || "/open-api/json",
 			agent: undiciAgent,
 			logger: fastify.log
 		});
-		if(!openApiRoutes){
+		if(!openApiRoutes && !config.ignoreHidden){
 			makeRoute({
 				url: "/*",
 				limit: service.hitLimit || config.defaultLimit,
-				authHandler: service.authHandler || config.authHandler
+				preHandler: service.preHandler
 			},
 			{
 				host: service.host,
-				remotePrefix: service.remotePrefix,
-				gwPrefix: service.gwPrefix,
+				remoteBaseUrl: service.remoteBaseUrl,
+				gwBaseUrl: service.gwBaseUrl,
 				bodyLimit: service.bodyLimit,
 				hooks:{
 					onError: service.hooks?.onError,
@@ -152,23 +157,27 @@ const loadGW = async (services:GWService[],
 				}
 			}, fastify);
 		}
-		else {
-			for(const route of resolveRoutes(openApiRoutes.routes, fastify, service.tag || config.gwTag, service.hiddenTag || config.gwTag)){
-
-				/* istanbul ignore next */
-				const limit = route.limit !== undefined ? route.limit : service.hitLimit || config.defaultLimit;
+		else if(openApiRoutes){
+			for(const route of resolveRoutes(openApiRoutes.routes, fastify, service.tag || config.gwTag, service.hiddenTag, config.gwHiddenTag)){
+				if(
+					(route.schema?.tags?.includes(config.gwHiddenTag) ||
+					(route.schema?.tags?.includes("X-HIDDEN"))
+				) && config.ignoreHidden) {
+					continue;
+				}
+				const limit = service.hitLimit !== undefined ? service.hitLimit : config.defaultLimit;
 				makeRoute({
 					url: route.url,
 					method: route.method as unknown as HTTPMethods,
 					schema: route.schema,
 					limit,
 					security: route.security,
-					authHandler: service.authHandler || config.authHandler
+					preHandler: service.preHandler
 				},
 				{
 					host: service.host,
-					remotePrefix: service.remotePrefix,
-					gwPrefix: service.gwPrefix,
+					remoteBaseUrl: service.remoteBaseUrl,
+					gwBaseUrl: service.gwBaseUrl,
 					bodyLimit: service.bodyLimit,
 					hooks:{
 						onError: service.hooks?.onError,
@@ -185,7 +194,7 @@ const gateway = async (fastify: FastifyInstance, config: GWConfig) => {
 	const undiciAgent = config.undiciAgent || new Agent({
 		keepAliveMaxTimeout: config.undiciOpts?.keepAliveMaxTimeout || 5 * 1000, // 5 seconds
 		connections: config.undiciOpts?.connections || 10,
-		tls: {
+		connect: {
 			rejectUnauthorized: config.undiciOpts?.rejectUnauthorized
 		}
 	});
@@ -193,8 +202,8 @@ const gateway = async (fastify: FastifyInstance, config: GWConfig) => {
 		{
 			gwTag: config.gwTag,
 			gwHiddenTag: config.gwHiddenTag,
-			authHandler: config.authHandler,
-			defaultLimit: config.defaultLimit
+			defaultLimit: config.defaultLimit,
+			ignoreHidden: config.ignoreHidden
 		},
 		undiciAgent, fastify);
 };

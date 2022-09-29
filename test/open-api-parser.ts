@@ -1,5 +1,5 @@
 import { test } from "tap";
-import {OpenApiParser} from "../src/OpenApiParser";
+import {OpenApiParser} from "../src/open-api-parser";
 
 test("OpenApiParser Class", {only: true}, async  t => {
 	t.beforeEach(async (t) => {
@@ -31,6 +31,20 @@ test("OpenApiParser Class", {only: true}, async  t => {
 		}, target, ["props1"], true);
 		t.same(target, {
 			"props1": true,
+			"x-copy": true
+		});
+	});
+	await t.test("Test copyProps examples", async t => {
+		const parser = new OpenApiParser();
+		const target = {};
+		parser.copyProps({
+			"props1": true,
+			"props2": false,
+			"x-copy": true,
+			"example": "test-value"
+		}, target, ["example"], true);
+		t.same(target, {
+			"examples": ["test-value"],
 			"x-copy": true
 		});
 	});
@@ -1185,6 +1199,23 @@ test("OpenApiParser Class", {only: true}, async  t => {
 							"name": "x-api-key",
 							"in": "header"
 						}
+					},
+					"requestBodies": {
+						"testBody": {
+							"description": "test body",
+							"content": {
+								"*/*": {
+									"schema": {
+										"type": "object",
+										"properties": {
+											"id": {
+												"type": "integer",
+											}
+										}
+									}
+								}
+							}
+						}
 					}
 				},
 				"paths": {
@@ -1370,5 +1401,362 @@ test("OpenApiParser Class", {only: true}, async  t => {
 			]
 		}]);
 	});
+	await t.test("parse no security", async t => {
+		const parser = new OpenApiParser();
+		const parsed =parser.parse(
+			{
+				"openapi": "3.0.3",
+				"components": {
+					"requestBodies": {
+						"testBody": {
+							"description": "test body",
+							"content": {
+								"*/*": {
+									"schema": {
+										"type": "object",
+										"properties": {
+											"id": {
+												"type": "integer",
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				},
+				"paths": {
+					"/test/{id}": {
+						"post":{
+							"tags": [
+								"store"
+							],
+							"summary": "Place an order for a pet",
+							"operationId": "placeOrder",
+							"parameters": [
+								{
+									"name": "id",
+									"in": "path",
+									"required": true,
+									"schema": {
+										"type": "integer",
+										"format": "int64"
+									}
+								}
+							],
+							"requestBody": {
+								"description": "order placed for purchasing the pet",
+								"content": {
+									"*/*": {
+										"schema": {
+											"type": "object",
+											"properties": {
+												"id": {
+													"type": "integer",
+													"format": "int64"
+												},
+											}
+										}
+									}
+								},
+								"required": true
+							},
+							"responses": {
+								"200": {
+									"description": "successful operation",
+									"content": {
+										"application/json": {
+											"schema": {
+												"type": "object",
+												"properties": {
+													"id": {
+														"type": "integer",
+														"format": "int64"
+													},
+												}
+											}
+										}
+									}
+								},
+								"400": {
+									"description": "Invalid Order",
+									"content": {}
+								}
+							},
+							"x-codegen-request-body-name": "body"
+						}}
+				}
+			}
+		);
+		const routes = parsed.routes;
 
+		t.same(routes, [{
+			"method": "POST",
+			"url": "/test/:id",
+			"schema": {
+				"tags": [
+					"store"
+				],
+				"summary": "Place an order for a pet",
+				"operationId": "placeOrder",
+				"x-codegen-request-body-name": "body",
+				"params": {
+					"type": "object",
+					"properties": {
+						"id": {
+							"type": "integer",
+							"format": "int64",
+						},
+					},
+					"required": [
+						"id",
+					],
+				},
+				"body": {
+					"type": "object",
+					"properties": {
+						"id": {
+							"type": "integer",
+							"format": "int64"
+						}
+					}
+				},
+				"response": {
+					"200": {
+						"type": "object",
+						"properties": {
+							"id": {
+								"type": "integer",
+								"format": "int64"
+							}
+						}
+					}
+				}
+			},
+			"operationId": "placeOrder",
+			"openapiSource": {
+				"tags": [
+					"store"
+				],
+				"summary": "Place an order for a pet",
+				"operationId": "placeOrder",
+				"parameters": [
+					{
+						"name": "id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer",
+							"format": "int64"
+						}
+					}
+				],
+				"requestBody": {
+					"description": "order placed for purchasing the pet",
+					"content": {
+						"*/*": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"id": {
+										"type": "integer",
+										"format": "int64"
+									}
+								}
+							}
+						}
+					},
+					"required": true
+				},
+				"responses": {
+					"200": {
+						"description": "successful operation",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"id": {
+											"type": "integer",
+											"format": "int64"
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "Invalid Order",
+						"content": {}
+					}
+				},
+				"x-codegen-request-body-name": "body"
+			},
+			"security": undefined
+		}]);
+	});
+
+	await t.test("changeExampleSyntax property type object - example as simple string", async t => {
+
+		const parser = new OpenApiParser();
+		const schema = {
+			properties:{
+				test: {
+					type: "object",
+					properties: {
+						testKey: {
+							type: "string",
+							example: "testValue"
+						}
+					}
+				}
+			}
+		};
+		parser.changeExampleSyntax(schema);
+		t.same(schema, {
+			properties:{
+				test: {
+					type: "object",
+					properties: {
+						testKey: {
+							type: "string",
+							examples: ["testValue"]
+						}
+					}
+				}
+			}
+		})
+
+	});
+	await t.test("changeExampleSyntax property type object - example as object", async t => {
+
+		const parser = new OpenApiParser();
+		const schema = {
+			properties:{
+				test: {
+					type: "object",
+					properties: {
+						testKey: {
+							type: "string",
+							examples: {
+								testValue: "testValue"
+							}
+						}
+					}
+				}
+			}
+		};
+		parser.changeExampleSyntax(schema);
+		t.same(schema, {
+			properties:{
+				test: {
+					type: "object",
+					properties: {
+						testKey: {
+							type: "string",
+							examples: ["testValue"]
+						}
+					}
+				}
+			}
+		})
+
+	});
+	await t.test("changeExampleSyntax property type array(items string) - example as simple string", async t => {
+
+		const parser = new OpenApiParser();
+		const schema = {
+			properties:{
+				test: {
+					type: "array",
+					items: {
+						type: "string",
+						example: "testValue"
+					}
+				}
+			}
+		};
+		parser.changeExampleSyntax(schema);
+		t.same(schema, {
+			properties:{
+				test: {
+					type: "array",
+					items: {
+						type: "string",
+						examples: ["testValue"]
+					}
+				}
+			}
+		})
+
+	});
+	await t.test("changeExampleSyntax property type array(items string) - example as object", async t => {
+
+		const parser = new OpenApiParser();
+		const schema = {
+			properties:{
+				test: {
+					type: "array",
+					items: {
+						type: "string",
+						examples: {
+							testValue: "testValue"
+						}
+					}
+				}
+			}
+		};
+		parser.changeExampleSyntax(schema);
+		t.same(schema, {
+			properties:{
+				test: {
+					type: "array",
+					items: {
+						type: "string",
+						examples: ["testValue"]
+					}
+				}
+			}
+		})
+
+	});
+	await t.test("changeExampleSyntax property type array(items object) - example as simple string", async t => {
+
+		const parser = new OpenApiParser();
+		const schema = {
+			properties:{
+				test: {
+					type: "array",
+					items: {
+						type: "object",
+						properties: {
+							testKey: {
+								type: "string",
+								example: "testValue"
+							}
+						}
+					}
+				}
+			}
+		};
+		parser.changeExampleSyntax(schema);
+		t.same(schema, {
+			properties:{
+				test: {
+					type: "array",
+					items: {
+						type: "object",
+						properties: {
+							testKey: {
+								type: "string",
+								examples: ["testValue"]
+							}
+						}
+
+					}
+				}
+			}
+		})
+
+	});
 });

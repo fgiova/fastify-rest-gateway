@@ -1,7 +1,7 @@
 import {test} from "tap";
 import fastify, {FastifyInstance, FastifyRequest} from "fastify";
 import fp from "fastify-plugin";
-import {makeRoute} from "../src/makeRoute";
+import {makeRoute} from "../src/make-route";
 import {MockAgent, MockPool, setGlobalDispatcher} from "undici";
 import fastifyReplyFrom from "@fastify/reply-from";
 import fastifyRateLimit from "@fastify/rate-limit";
@@ -9,6 +9,7 @@ import {Type} from "@sinclair/typebox";
 // @ts-ignore
 import createError from "http-errors";
 import fastifySwagger from "@fastify/swagger";
+import fastifySwaggerUi from "@fastify/swagger-ui";
 
 test("Make routes for fastify", {only: true}, async  t => {
 	t.beforeEach(async (t) => {
@@ -233,7 +234,7 @@ test("Make routes for fastify", {only: true}, async  t => {
 		t.same(res.json(), {payload: {test: "test"}});
 	});
 
-	await t.test("Simple route w GWPrefix", async t => {
+	await t.test("Simple route w gwBaseUrl", async t => {
 		const app = t.context.app as FastifyInstance;
 		const mockPool = t.context.mockPool as MockPool;
 		mockPool.intercept({
@@ -258,7 +259,7 @@ test("Make routes for fastify", {only: true}, async  t => {
 			}
 		}, {
 			host: "https://test.fgiova.com",
-			gwPrefix: "/testone"
+			gwBaseUrl: "/testone"
 		}, app);
 		await app.ready();
 		const res = await app.inject({
@@ -269,7 +270,7 @@ test("Make routes for fastify", {only: true}, async  t => {
 		t.same(res.json(), {test: "test"});
 	});
 
-	await t.test("Simple route w remotePrefix", async t => {
+	await t.test("Simple route w remoteBaseUrl", async t => {
 		const app = t.context.app as FastifyInstance;
 		const mockPool = t.context.mockPool as MockPool;
 		mockPool.intercept({
@@ -294,7 +295,7 @@ test("Make routes for fastify", {only: true}, async  t => {
 			}
 		}, {
 			host: "https://test.fgiova.com",
-			remotePrefix: "/testone"
+			remoteBaseUrl: "/testone"
 		}, app);
 		await app.ready();
 		const res = await app.inject({
@@ -446,7 +447,8 @@ test("Make routes for fastify", {only: true}, async  t => {
 				}
 			},
 			hideUntagged: true,
-			exposeRoute: true,
+		});
+		app.register(fastifySwaggerUi, {
 			routePrefix: "/open-api",
 		});
 		const mockPool = t.context.mockPool as MockPool;
@@ -489,7 +491,7 @@ test("Make routes for fastify", {only: true}, async  t => {
 		t.equal(res.statusCode, 200);
 		t.same(res.json(), {test: "test"});
 	});
-	await t.test("Simple route w security and security handler", {only: true}, async t => {
+	await t.test("Simple route w security and security handler", async t => {
 		const app = t.context.app as FastifyInstance;
 		const mockPool = t.context.mockPool as MockPool;
 		mockPool.intercept({
@@ -513,7 +515,7 @@ test("Make routes for fastify", {only: true}, async  t => {
 						})
 					}
 				},
-				authHandler: async (request, reply) => {
+				preHandler: async (request, reply) => {
 					if(request.headers.authorization === "test") {
 						return true;
 					}
@@ -630,7 +632,7 @@ test("Make routes for fastify", {only: true}, async  t => {
 		});
 		t.equal(res.statusCode, 429);
 	});
-	await t.test("Simple route w limit exceeded by function", async t => {
+	await t.test("Simple route w limit exceeded by max function", async t => {
 		const app = t.context.app as FastifyInstance;
 		const mockPool = t.context.mockPool as MockPool;
 		mockPool.intercept({
@@ -657,6 +659,52 @@ test("Make routes for fastify", {only: true}, async  t => {
 				limit: {
 					max: (req) => {
 						return 1;
+					}
+				}
+			}, {
+				host: "https://test.fgiova.com",
+			}, fastify);
+			next();
+		}));
+		await app.ready();
+		await app.inject({
+			path: "/test",
+			method: "GET"
+		});
+		const res = await app.inject({
+			path: "/test",
+			method: "GET"
+		});
+		t.equal(res.statusCode, 429);
+	});
+	await t.test("Simple route w limit exceeded by keyGenerator function", async t => {
+		const app = t.context.app as FastifyInstance;
+		const mockPool = t.context.mockPool as MockPool;
+		mockPool.intercept({
+			path: "/test",
+			method: "GET"
+		}).reply(200, () => {
+			return {test: "test"}
+		}, {
+			headers: {
+				"content-type" :"application/json"
+			}
+		});
+		app.register(fp((fastify: FastifyInstance, opts: {}, next: any) => {
+			makeRoute({
+				url: "/test",
+				method: "GET",
+				schema: {
+					response: {
+						200: Type.Object({
+							test: Type.String()
+						})
+					}
+				},
+				limit: {
+					max: 1,
+					keyGenerator: (req) => {
+						return req.ip;
 					}
 				}
 			}, {

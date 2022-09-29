@@ -3,10 +3,10 @@
     "transpileOnly": true
   },
   "compilerOptions": {
-    "target": "es2021",
+    "target": "ES2022",
     "moduleResolution": "node",
     "outDir": "dist",
-    "declaration": false,
+    "declaration": true,
     "rootDir": "src",
     "module": "commonjs",
     "sourceMap": false,

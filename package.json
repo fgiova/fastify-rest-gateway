@@ -1,7 +1,7 @@
 {
-  "name": "fastify-rest-gateway",
-  "description": "fastify-rest-gateway",
-  "version": "0.1.0",
+  "name": "@fgiova/fastify-rest-gateway",
+  "description": "REST gateway plugin for fastify",
+  "version": "1.0.0",
   "main": "index.js",
   "scripts": {
     "prebuild": "rimraf dist",
@@ -9,6 +9,21 @@
     "test": "tap --node-arg=--require=ts-node/register",
     "test:debug": "tap -T -O --node-arg=--require=ts-node/register"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fgiova/fastify-rest-gateway.git"
+  },
+  "author": "Francesco Giovannini <fgiova@fgiova.com>",
+  "license": "MIT",
+  "keywords": [
+    "fastify",
+    "rest",
+    "openapi",
+    "gateway",
+    "serve",
+    "generate",
+    "routes"
+  ],
   "tap": {
     "ts": true,
     "lines": 100,
@@ -17,21 +32,22 @@
     "functions": 100
   },
   "devDependencies": {
-    "@fastify/rate-limit": "^7.2.0",
-    "@fastify/reply-from": "^8.1.0",
-    "@fastify/swagger": "^7.4.1",
-    "@sinclair/typebox": "^0.24.20",
-    "@types/http-errors": "^1.8.2",
-    "@types/node": "^18.0.6",
-    "@types/tap": "^15.0.7",
-    "fastify": "^4.2.1",
+    "@fastify/rate-limit": "^8.0.3",
+    "@fastify/swagger": "^8.8.0",
+    "@fastify/swagger-ui": "^1.9.3",
+    "@sinclair/typebox": "^0.29.6",
+    "@types/http-errors": "^2.0.1",
+    "@types/node": "^18.17.1",
+    "@types/tap": "^15.0.8",
+    "fastify": "^4.20.0",
     "http-errors": "^2.0.0",
-    "tap": "^16.3.0",
-    "ts-node": "^10.4.0",
-    "typescript": "^4.7.4"
+    "tap": "^16.3.7",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.1.6"
   },
   "dependencies": {
-    "fastify-plugin": "^4.0.0",
-    "undici": "^5.8.0"
+    "@fastify/reply-from": "^9.4.0",
+    "fastify-plugin": "^4.5.1",
+    "undici": "^5.22.1"
   }
 }

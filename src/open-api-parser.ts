@@ -39,36 +39,40 @@ export class OpenApiParser {
 	}
 
 	makeOperationId(operation: string, path: string) {
-		// make a nice camelCase operationID
+		// make a nice camelCase operationID in case it is not defined in the spec
 		// e.g. get /user/{name}  becomes getUserByName
-		const firstUpper = (str: string) => str.substr(0, 1).toUpperCase() + str.substr(1);
+		const firstUpper = (str: string) => str.substring(0, 1).toUpperCase() + str.substring(1);
 		const by = (matched: string, p1: string) => "By" + firstUpper(p1);
 		const parts = path.split("/").slice(1);
 		parts.unshift(operation);
-		const opId = parts
+		return  parts
 			.map((item, i) => (i > 0 ? firstUpper(item) : item))
 			.join("")
 			.replace(/{(\w+)}/g, by)
 			.replace(/[^a-z]/gi, "");
-		return opId;
 	}
 
 	makeURL(path: string) {
-		// fastify wants 'path/:param' instead of openapis 'path/{param}'
+		// fastify route parameters must be 'path/:param' instead of openapi 'path/{param}'
 		return path.replace(/{(\w+)}/g, ":$1");
 	}
 
 	copyProps(source: Record<string, any>, target: Record<string, any>, list: string[], copyXprops = false) {
-		Object.keys(source).forEach((item) => {
+		for(const item in source){
+			// openapi 3.1.0 has a "example" property, but ajv wants "examples"
+			if (item === "example" && list.includes(item) ){
+				target.examples = [source[item]];
+				continue;
+			}
 			if (list.includes(item) || (copyXprops && item.startsWith("x-"))) {
 				target[item] = source[item];
 			}
-		});
+		}
 	}
 
-	parseSecurity(schemes?: Record<string, any>[]) {
-		return schemes
-			? schemes.map((item) => {
+	parseSecurity(schemas?: Record<string, any>[]) {
+		return schemas
+			? schemas.map((item) => {
 				const name = Object.keys(item)[0];
 				return {
 					name,
@@ -76,7 +80,6 @@ export class OpenApiParser {
 				};
 			})
 			: undefined;
-		// return schemes ? schemes.map((item) => Object.keys(item)[0]) : undefined;
 	}
 
 	parseQueryString(data: DataSchema[]) {
@@ -95,7 +98,7 @@ export class OpenApiParser {
 			properties: {},
 		};
 		const required: string[] = [];
-		data.forEach((item: { name: string, schema: Record<string, string>, required?: boolean }) => {
+		for (const item of data) {
 			params.properties[item.name] = item.schema;
 			this.copyProps(item, params.properties[item.name], ["description"]);
 			// ajv wants "required" to be an array, which seems to be too strict
@@ -103,7 +106,7 @@ export class OpenApiParser {
 			if (item.required) {
 				required.push(item.name);
 			}
-		});
+		}
 		if (required.length > 0) {
 			params.required = required;
 		}
@@ -127,11 +130,64 @@ export class OpenApiParser {
 				break;
 			}
 		});
-		if (params.length > 0) schema.params = this.parseParams(params);
-		if (querystring.length > 0)
+		if (params.length) schema.params = this.parseParams(params);
+		if (querystring.length)
 			schema.querystring = this.parseQueryString(querystring);
-		if (headers.length > 0) schema.headers = this.parseParams(headers);
+		if (headers.length) schema.headers = this.parseParams(headers);
 	}
+
+	parseExample(schema: Record<string, any>,key: string) {
+		const value = schema.properties[key];
+		const simpleArray = (value.items && !["array", "object"].includes(value.items.type));
+		/* istanbul ignore else */
+		if(value){
+			if(simpleArray) {
+				/* istanbul ignore else */
+				if (value.items.example){
+					schema.properties[key].items.examples = [value.items.example];
+					delete schema.properties[key].items.example;
+				}
+				else if  (value.items.examples && !Array.isArray(value.items.examples)) {
+					schema.properties[key].items.examples = Object.keys(value.items.examples).map((k) => value.items.examples[k]);
+				}
+			}
+			else {
+				/* istanbul ignore else */
+				if (value.example) {
+					schema.properties[key].examples = [value.example];
+					delete schema.properties[key].example;
+				}
+				else if (value.examples && !Array.isArray(value.examples)) {
+					schema.properties[key].examples = Object.keys(value.examples).map((k) => value.examples[k]);
+				}
+			}
+
+		}
+	}
+
+	// openapi 3.1.0 "examples" property is an object, but ajv wants an array
+	changeExampleSyntax(schema: Record<string, any>) {
+		/* istanbul ignore else */
+		if (schema.properties) {
+			for (const [key, value] of Object.entries(schema.properties as Record<string, any>)) {
+				if (value.type === "object") {
+					this.changeExampleSyntax(value);
+				}
+				else if (value.type === "array") {
+					if(["array", "object"].includes(value.items.type)){
+						this.changeExampleSyntax(value.items);
+					}
+					else {
+						this.parseExample(schema,key);
+					}
+				}
+				else {
+					this.parseExample(schema,key);
+				}
+			}
+		}
+	}
+
 
 	parseBody(data: {content?:Record<string, { schema: any }>}) {
 		if (data && data.content) {
@@ -139,9 +195,13 @@ export class OpenApiParser {
 			if (mimeTypes.length === 0){
 				return undefined;
 			}
-			mimeTypes.forEach(mimeType => this.config.contentTypes.add(mimeType));
+			for(const mimeType of mimeTypes){
+				this.config.contentTypes.add(mimeType);
+			}
 			// fastify only supports one mimeType per path, pick the last
-			return data.content[mimeTypes.pop()].schema;
+			const schema = data.content[mimeTypes.pop()].schema;
+			this.changeExampleSyntax(schema);
+			return schema;
 		}
 		return undefined;
 	}
@@ -158,7 +218,7 @@ export class OpenApiParser {
 	}
 
 	makeSchema(genericSchema: Record<string, any>, data:  any) {
-		const schema = Object.assign({}, genericSchema);
+		const schema = {...genericSchema};
 		const copyItems = ["tags", "summary", "description", "operationId"];
 		this.copyProps(data, schema, copyItems, true);
 		if (data.parameters) this.parseParameters(schema, data.parameters);
@@ -167,7 +227,7 @@ export class OpenApiParser {
 			schema.body = body;
 		}
 		const response = this.parseResponses(data.responses);
-		if (Object.keys(response).length > 0) {
+		if (Object.keys(response).length) {
 			schema.response = response;
 		}
 		return schema;
@@ -178,12 +238,9 @@ export class OpenApiParser {
 			method: operation.toUpperCase(),
 			url: this.makeURL(path),
 			schema: this.makeSchema(genericSchema, operationSpec),
-			operationId:
-				operationSpec.operationId || this.makeOperationId(operation, path),
+			operationId: operationSpec.operationId || this.makeOperationId(operation, path),
 			openapiSource: operationSpec,
-			security: this.parseSecurity(
-				operationSpec.security || this.spec.security
-			),
+			security: this.parseSecurity( operationSpec.security || this.spec.security ),
 		};
 		this.config.routes.push(route);
 	}
@@ -201,12 +258,7 @@ export class OpenApiParser {
 			}
 			for (const pathItem in pathSpec) {
 				if (HttpOperations.has(pathItem)) {
-					this.processOperation(
-						path,
-						pathItem,
-						pathSpec[pathItem],
-						genericSchema
-					);
+					this.processOperation(path, pathItem, pathSpec[pathItem], genericSchema);
 				}
 			}
 		}
@@ -217,16 +269,19 @@ export class OpenApiParser {
 
 		for (const item in spec) {
 			switch (item) {
-			case "paths":
-				this.processPaths(spec.paths);
+				case "paths":
+					this.processPaths(spec.paths);
 				break;
-			case "components":
-				/* istanbul ignore else */
-				if (spec.components.securitySchemes) {
-					this.config.securitySchemes = spec.components.securitySchemes;
-				} // the missing break is on purpose !
-			default:
-				this.config.generic[item] = spec[item];
+				case "components":
+					if (spec.components.securitySchemes) {
+						this.config.securitySchemes = spec.components.securitySchemes;
+					}
+					else {
+						this.config.generic[item] = spec[item];
+					}
+				break;
+				default:
+					this.config.generic[item] = spec[item];
 			}
 		}
 		return this.config;
