@@ -1,4 +1,5 @@
 import { test } from "tap";
+// @ts-ignore
 import {OpenApiParser} from "../src/open-api-parser";
 
 test("OpenApiParser Class", {only: true}, async  t => {

@@ -100,9 +100,9 @@ const readService = async (options: {
 };
 
 const resolveRoutes = (routes: any[], fastify: FastifyInstance,
-                       gwTag="public-api",
-                       hiddenTag="private-api",
-                       gwHiddenTag = "X-HIDDEN") => {
+	gwTag="public-api",
+	hiddenTag="private-api",
+	gwHiddenTag = "X-HIDDEN") => {
 	const gwRoutes: any[] = [];
 	const hasSwagger = fastify.hasDecorator("swagger");
 	for(const route of routes){
@@ -119,7 +119,7 @@ const resolveRoutes = (routes: any[], fastify: FastifyInstance,
 				}, []);
 			}
 			else {
-				delete route.schema.tags
+				delete route.schema.tags;
 			}
 			gwRoutes.push(route);
 		}
@@ -162,7 +162,7 @@ const loadGW = async (services:GWService[],
 				if(
 					(route.schema?.tags?.includes(config.gwHiddenTag) ||
 					(route.schema?.tags?.includes("X-HIDDEN"))
-				) && config.ignoreHidden) {
+					) && config.ignoreHidden) {
 					continue;
 				}
 				const limit = service.hitLimit !== undefined ? service.hitLimit : config.defaultLimit;

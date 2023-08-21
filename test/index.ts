@@ -1,6 +1,7 @@
 import {test} from "tap";
 import fastify, {FastifyInstance, FastifyRequest} from "fastify";
 import {MockAgent} from "undici";
+// @ts-ignore
 import gateway from "../src/index";
 import fastifySwagger from "@fastify/swagger";
 import fastifySwaggerUi from "@fastify/swagger-ui";

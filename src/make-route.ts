@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import {
 	FastifyInstance,
 	FastifyReply,
@@ -92,8 +93,8 @@ function proxy(remote:RemoteOpts) {
 		} catch (err) {
 			return reply.send(err);
 		}
-	}
-};
+	};
+}
 
 const makeRoute = (
 	route: GatewayRoute,
@@ -146,7 +147,7 @@ const makeRoute = (
 	}
 	url = url.replace(/\/+/g, "/");
 	options.hooks = options.hooks || {};
-	options.hooks.onRequest = options.hooks.onRequest || (async (req: FastifyRequest, reply: FastifyReply) => { });
+	options.hooks.onRequest = options.hooks.onRequest || (async (req: FastifyRequest, reply: FastifyReply) => { return });
 	options.hooks.onResponse = options.hooks.onResponse || ((req: FastifyRequest, reply: FastifyReply, res: any) => reply.send(res));
 	app.route({ method: methods, preHandler, config, schema: route.schema, bodyLimit, url, handler: proxy(options) });
 };

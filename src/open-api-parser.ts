@@ -1,4 +1,4 @@
-//Fork and rework of the ParserV3 from the https://github.com/seriousme/fastify-openapi-glue
+// Fork and rework of the ParserV3 from the https://github.com/seriousme/fastify-openapi-glue
 
 const HttpOperations = new Set([
 	"delete",
@@ -269,19 +269,19 @@ export class OpenApiParser {
 
 		for (const item in spec) {
 			switch (item) {
-				case "paths":
-					this.processPaths(spec.paths);
+			case "paths":
+				this.processPaths(spec.paths);
 				break;
-				case "components":
-					if (spec.components.securitySchemes) {
-						this.config.securitySchemes = spec.components.securitySchemes;
-					}
-					else {
-						this.config.generic[item] = spec[item];
-					}
-				break;
-				default:
+			case "components":
+				if (spec.components.securitySchemes) {
+					this.config.securitySchemes = spec.components.securitySchemes;
+				}
+				else {
 					this.config.generic[item] = spec[item];
+				}
+				break;
+			default:
+				this.config.generic[item] = spec[item];
 			}
 		}
 		return this.config;

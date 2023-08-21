@@ -1,6 +1,7 @@
 import {test} from "tap";
 import fastify, {FastifyInstance, FastifyRequest} from "fastify";
 import fp from "fastify-plugin";
+// @ts-ignore
 import {makeRoute} from "../src/make-route";
 import {MockAgent, MockPool, setGlobalDispatcher} from "undici";
 import fastifyReplyFrom from "@fastify/reply-from";

@@ -2,10 +2,14 @@
   "name": "@fgiova/fastify-rest-gateway",
   "description": "REST gateway plugin for fastify",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "dist/index.js",
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "prebuild": "rimraf dist",
     "build": "tsc",
+    "lint": "eslint 'src/**/*.ts'",
     "test": "tap --node-arg=--require=ts-node/register",
     "test:debug": "tap -T -O --node-arg=--require=ts-node/register"
   },
@@ -35,12 +39,20 @@
     "@fastify/rate-limit": "^8.0.3",
     "@fastify/swagger": "^8.8.0",
     "@fastify/swagger-ui": "^1.9.3",
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/git": "^10.0.1",
     "@sinclair/typebox": "^0.29.6",
     "@types/http-errors": "^2.0.1",
     "@types/node": "^18.17.1",
     "@types/tap": "^15.0.8",
+    "@typescript-eslint/eslint-plugin": "^6.4.0",
+    "@typescript-eslint/parser": "^6.4.0",
+    "conventional-changelog-conventionalcommits": "^6.1.0",
+    "eslint": "^8.47.0",
+    "eslint-plugin-import": "^2.28.1",
     "fastify": "^4.20.0",
     "http-errors": "^2.0.0",
+    "semantic-release": "^21.0.9",
     "tap": "^16.3.7",
     "ts-node": "^10.9.1",
     "typescript": "^5.1.6"
