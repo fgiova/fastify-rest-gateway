@@ -7,13 +7,14 @@ import fastifySwagger from "@fastify/swagger";
 import fastifySwaggerUi from "@fastify/swagger-ui";
 import fastifyReplyFrom from "@fastify/reply-from";
 import fastifyRateLimit from "@fastify/rate-limit";
+import path = require("node:path");
+import {randomUUID} from "crypto";
+import {unlink, writeFile} from "fs/promises";
 
-test("Gateway", {only: true}, async t => {
+test("Gateway", async t => {
 	t.beforeEach(async (t) => {
 		const mockAgentOAPI = new MockAgent();
 		const mockPoolOAPI = mockAgentOAPI.get("https://test.fgiova.com");
-		const mockAgentGW = new MockAgent();
-		const mockPoolGW = mockAgentGW.get("https://test.fgiova.com");
 
 		const app = fastify();
 		app.register(fastifySwagger, {
@@ -42,7 +43,7 @@ test("Gateway", {only: true}, async t => {
 			routePrefix: "/open-api",
 		});
 		app.register(fastifyReplyFrom, {
-			undici: mockPoolGW as any
+			undici: mockPoolOAPI as any
 		});
 		app.register(fastifyRateLimit, {
 			global: false,
@@ -70,12 +71,15 @@ test("Gateway", {only: true}, async t => {
 			app,
 			mockAgentOAPI,
 			mockPoolOAPI,
-			mockAgentGW,
-			mockPoolGW
 		}
 	});
 	t.afterEach(async (t) => {
-		await t.context.app.close();
+		try {
+			await t.context.app.close();
+		}
+		catch (e) {
+			console.error(e);
+		}
 	});
 
 	await t.test("Startup Gateway", async t => {
@@ -113,7 +117,7 @@ test("Gateway", {only: true}, async t => {
 			}
 		});
 
-		t.context.mockPoolGW.intercept({
+		t.context.mockPoolOAPI.intercept({
 			path: "/v1/test/public-api/",
 			method: "GET"
 		})
@@ -158,7 +162,7 @@ test("Gateway", {only: true}, async t => {
 		})
 		.reply(404, "Not Found");
 
-		t.context.mockPoolGW.intercept({
+		t.context.mockPoolOAPI.intercept({
 			path: "/v1/test/public-api/",
 			method: "GET"
 		})
@@ -196,6 +200,93 @@ test("Gateway", {only: true}, async t => {
 		});
 	});
 
+	await t.test("Startup Gateway w route file", async t => {
+		const app = t.context.app as FastifyInstance;
+		const routesFile = path.resolve(`./routes-fixed-${randomUUID()}.json`);
+		await writeFile(routesFile, JSON.stringify([
+			{
+				"service": {
+					"host": "http://localhost:3001",
+					"remoteBaseUrl": "/v1/test/public-api/",
+					"gwBaseUrl": "/v1/test/"
+				},
+				"routes": [
+					{
+						"method": "GET",
+						"url": "/v1/test/public-api/",
+						"schema": {
+							"tags": [
+								"test"
+							]
+						},
+						"operationId": "getVTestPublicapi",
+						"openapiSource": {
+							"tags": [
+								"public-api",
+								"test"
+							]
+						}
+					},
+					{
+						"method": "GET",
+						"url": "/v1/test/public-api/restart",
+						"schema": {
+							"tags": [
+								"test"
+							]
+						},
+						"operationId": "getVTestPublicapiRestart",
+						"openapiSource": {
+							"tags": [
+								"public-api",
+								"test"
+							]
+						}
+					}
+				]
+			}
+		]));
+
+		t.context.mockPoolOAPI.intercept({
+			path: "/v1/test/public-api/",
+			method: "GET"
+		})
+			.reply(200, {
+				test: "test"
+			}, {
+				headers: {
+					"content-type" :"application/json"
+				}
+			});
+
+		app.register(gateway, {
+			defaultLimit: {
+				max: 2
+			},
+			undiciAgent: t.context.mockPoolOAPI,
+			services: [
+				{
+					host: "https://test.fgiova.com",
+					remoteBaseUrl: "/v1/test/public-api/",
+					gwBaseUrl: "/v1/test/"
+				},
+
+			],
+			routesFile
+		});
+
+		await app.ready();
+		const res = await app.inject({
+			path: "/v1/test/",
+			method: "GET"
+		});
+		t.equal(res.statusCode, 200);
+		t.same(res.json(), {
+			test: "test"
+		});
+		await unlink(routesFile);
+	});
+
 	await t.test("Startup Gateway limit default", async t => {
 		const app = t.context.app as FastifyInstance;
 		t.context.mockPoolOAPI.intercept({
@@ -231,7 +322,7 @@ test("Gateway", {only: true}, async t => {
 				}
 			});
 
-		t.context.mockPoolGW.intercept({
+		t.context.mockPoolOAPI.intercept({
 			path: "/v1/test/public-api/",
 			method: "GET"
 		})
@@ -308,7 +399,7 @@ test("Gateway", {only: true}, async t => {
 				}
 			});
 
-		t.context.mockPoolGW.intercept({
+		t.context.mockPoolOAPI.intercept({
 			path: "/v1/test/public-api/",
 			method: "GET"
 		})
@@ -386,7 +477,7 @@ test("Gateway", {only: true}, async t => {
 				}
 			});
 
-		t.context.mockPoolGW.intercept({
+		t.context.mockPoolOAPI.intercept({
 			path: "/v1/test/public-api/",
 			method: "GET"
 		})
@@ -432,7 +523,7 @@ test("Gateway", {only: true}, async t => {
 			method: "GET"
 		}).replyWithError(new Error("kaboom"))
 
-		t.context.mockPoolGW.intercept({
+		t.context.mockPoolOAPI.intercept({
 			path: "/v1/test/public-api/",
 			method: "GET"
 		})
@@ -474,7 +565,7 @@ test("Gateway", {only: true}, async t => {
 			method: "GET"
 		}).reply(500, {});
 
-		t.context.mockPoolGW.intercept({
+		t.context.mockPoolOAPI.intercept({
 			path: "/v1/test/public-api/",
 			method: "GET"
 		})
@@ -517,7 +608,7 @@ test("Gateway", {only: true}, async t => {
 			method: "GET"
 		}).reply(200, "test");
 
-		t.context.mockPoolGW.intercept({
+		t.context.mockPoolOAPI.intercept({
 			path: "/v1/test/public-api/",
 			method: "GET"
 		})
@@ -588,7 +679,7 @@ test("Gateway", {only: true}, async t => {
 			}
 		});
 
-		t.context.mockPoolGW.intercept({
+		t.context.mockPoolOAPI.intercept({
 			path: "/v1/test/private-api/",
 			method: "GET"
 		})
@@ -659,7 +750,7 @@ test("Gateway", {only: true}, async t => {
 				}
 			});
 
-		t.context.mockPoolGW.intercept({
+		t.context.mockPoolOAPI.intercept({
 			path: "/v1/test/public-api/",
 			method: "GET"
 		})
@@ -744,7 +835,7 @@ test("Gateway", {only: true}, async t => {
 				}
 			});
 
-		t.context.mockPoolGW.intercept({
+		t.context.mockPoolOAPI.intercept({
 			path: "/v1/test/public-api/",
 			method: "GET"
 		})
@@ -788,12 +879,10 @@ test("Gateway", {only: true}, async t => {
 	});
 });
 
-test("Gateway", {only: true}, async t => {
+test("Gateway Error", async t => {
 	t.beforeEach(async (t) => {
 		const mockAgentOAPI = new MockAgent();
 		const mockPoolOAPI = mockAgentOAPI.get("https://test.fgiova.com");
-		const mockAgentGW = new MockAgent();
-		const mockPoolGW = mockAgentGW.get("https://test.fgiova.com");
 
 		const app = fastify();
 		app.register(fastifySwagger, {
@@ -823,15 +912,13 @@ test("Gateway", {only: true}, async t => {
 			routePrefix: "/open-api",
 		});
 		app.register(fastifyReplyFrom, {
-			undici: mockPoolGW as any
+			undici: mockPoolOAPI as any
 		});
 
 		t.context = {
 			app,
 			mockAgentOAPI,
 			mockPoolOAPI,
-			mockAgentGW,
-			mockPoolGW
 		}
 	});
 	t.afterEach(async (t) => {
@@ -873,7 +960,7 @@ test("Gateway", {only: true}, async t => {
 				}
 			});
 
-		t.context.mockPoolGW.intercept({
+		t.context.mockPoolOAPI.intercept({
 			path: "/v1/test/public-api/",
 			method: "GET"
 		})
@@ -917,20 +1004,16 @@ test("Gateway w/o swagger", async t => {
 	t.beforeEach(async (t) => {
 		const mockAgentOAPI = new MockAgent();
 		const mockPoolOAPI = mockAgentOAPI.get("https://test.fgiova.com");
-		const mockAgentGW = new MockAgent();
-		const mockPoolGW = mockAgentGW.get("https://test.fgiova.com");
 
 		const app = fastify();
 		app.register(fastifyReplyFrom, {
-			undici: mockPoolGW as any
+			undici: mockPoolOAPI as any
 		});
 
 		t.context = {
 			app,
 			mockAgentOAPI,
-			mockPoolOAPI,
-			mockAgentGW,
-			mockPoolGW
+			mockPoolOAPI
 		}
 	});
 	t.afterEach(async (t) => {
@@ -972,7 +1055,7 @@ test("Gateway w/o swagger", async t => {
 			}
 		});
 
-		t.context.mockPoolGW.intercept({
+		t.context.mockPoolOAPI.intercept({
 			path: "/v1/test/public-api/",
 			method: "GET"
 		})

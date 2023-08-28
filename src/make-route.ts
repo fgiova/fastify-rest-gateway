@@ -87,6 +87,7 @@ function proxy(remote:RemoteOpts) {
 				remoteUrl = remote.remoteBaseUrl + remoteUrl;
 			}
 			const shouldAbortProxy = await remote.hooks.onRequest(request, reply);
+
 			if (!shouldAbortProxy) {
 				return reply.from(remote.host + remoteUrl, Object.assign({}, remote.hooks));
 			}
