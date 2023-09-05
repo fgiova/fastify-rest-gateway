@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/fgiova/fastify-rest-gateway/compare/1.0.1...1.1.0) (2023-09-05)
+
+
+### Features
+
+* add support for @fastify/restartable ([d622e60](https://github.com/fgiova/fastify-rest-gateway/commit/d622e60b01d59edd8254e6cc82c8aa9cdbddadd0))
+
 ## [1.0.1](https://github.com/fgiova/fastify-rest-gateway/compare/1.0.0...1.0.1) (2023-08-21)
 
 

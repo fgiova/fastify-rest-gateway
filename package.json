@@ -1,7 +1,7 @@
 {
   "name": "@fgiova/fastify-rest-gateway",
   "description": "REST gateway plugin for fastify",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "main": "dist/index.js",
   "files": [
     "dist"
