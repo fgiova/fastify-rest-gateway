@@ -10,8 +10,8 @@
     "prebuild": "rimraf dist",
     "build": "tsc",
     "lint": "eslint 'src/**/*.ts'",
-    "test": "tap --node-arg=--require=ts-node/register",
-    "test:debug": "tap -T -O --node-arg=--require=ts-node/register"
+    "test": "tap",
+    "test:debug": "tap -T -O"
   },
   "repository": {
     "type": "git",
@@ -32,6 +32,7 @@
     "access": "public"
   },
   "tap": {
+    "node-arg": "--require=ts-node/register",
     "ts": true,
     "lines": 100,
     "branches": 100,
@@ -40,6 +41,7 @@
   },
   "devDependencies": {
     "@fastify/rate-limit": "^8.0.3",
+    "@fastify/restartable": "^2.1.0",
     "@fastify/swagger": "^8.8.0",
     "@fastify/swagger-ui": "^1.9.3",
     "@semantic-release/changelog": "^6.0.3",
@@ -63,6 +65,7 @@
   "dependencies": {
     "@fastify/reply-from": "^9.4.0",
     "fastify-plugin": "^4.5.1",
+    "p-map": "^4.0.0",
     "undici": "^5.22.1"
   }
 }
